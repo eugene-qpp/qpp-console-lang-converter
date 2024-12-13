@@ -7,6 +7,6 @@ namespace rapidcsv
 }
 
 rapidcsv::Document readCvs(const std::string &filename, int columnNameIndex = 1, int rowNameIndex = 1);
-void writeJson(const rapidcsv::Document &doc, const std::string &columnName, const std::string &filename, bool shouldReplaceBreakLines = true);
+std::set<std::string> writeJson(const rapidcsv::Document &doc, const std::string &columnName, const std::string &filename, bool shouldReplaceBreakLines = true);
 
 #endif // CONVERT_HPP

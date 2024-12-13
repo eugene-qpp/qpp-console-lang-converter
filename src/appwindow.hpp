@@ -3,7 +3,6 @@
 
 #include <QWidget>
 #include <QSettings>
-#include <QSharedPointer>
 
 class QTextEdit;
 class QString;
@@ -23,7 +22,7 @@ private slots:
     void onConvertButtonClicked();
 
 private:
-    QSharedPointer<QSettings> settings;
+    std::unique_ptr<QSettings> settings;
     QTextEdit *filenameTextEdit;
     QString translationFilenameString;
     QPushButton *convertButton;

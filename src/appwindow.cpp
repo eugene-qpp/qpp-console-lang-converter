@@ -1,4 +1,6 @@
 #include "appwindow.hpp"
+#include <set>
+#include <sstream>
 #include <QTextEdit>
 #include <QLabel>
 #include <QPushButton>
@@ -7,7 +9,6 @@
 #include <QCheckBox>
 #include <QMessageBox>
 #include <QSettings>
-#include <QScopedPointer>
 
 #include "rapidcsv.h"
 #include "convert.hpp"
@@ -20,7 +21,7 @@ AppWindow::AppWindow(QWidget *parent) : QWidget(parent)
     rowNameIndex = 1;
     shouldReplaceBreakLines = true;
 
-    settings = QSharedPointer<QSettings>(new QSettings("settings.ini", QSettings::IniFormat));
+    settings = std::make_unique<QSettings>("settings.ini", QSettings::IniFormat);
     QVariant columnNameIndexVariant = settings->value("columnNameIndex");
     if (!columnNameIndexVariant.isNull())
     {
@@ -115,6 +116,7 @@ void AppWindow::onConvertButtonClicked()
     const QString outputBaseFolder = "locales";
     const std::string langNames[] = {"en", "zh"};
     const char *error = nullptr;
+    std::stringstream duplicatedKeysMessageStream;
 
     QFile f(translationFilenameString);
     if (!f.exists())
@@ -136,7 +138,17 @@ void AppWindow::onConvertButtonClicked()
                 dir.mkpath(outputFolder);
             }
             const QString filename = outputFolder + "/" + "common.json";
-            writeJson(doc, langName, filename.toStdString(), shouldReplaceBreakLines);
+
+            const std::set<std::string> duplicatedKeys = writeJson(doc, langName, filename.toStdString(), shouldReplaceBreakLines);
+
+            if (duplicatedKeys.size() > 0)
+            {
+                duplicatedKeysMessageStream << langName << ":\n";
+                for (auto &&key : duplicatedKeys)
+                {
+                    duplicatedKeysMessageStream << "  " << key << "\n";
+                }
+            }
         }
     }
     catch (const std::exception &e)
@@ -151,6 +163,16 @@ void AppWindow::onConvertButtonClicked()
     }
     else
     {
-        QMessageBox::information(this, "Convert Result", "Success", QMessageBox::StandardButton::Ok);
+        QString duplicatedKeysMessage{duplicatedKeysMessageStream.str().c_str()};
+        QString message;
+        if (duplicatedKeysMessage.size() > 0)
+        {
+            message = "Succcess with duplicated keys:\n" + duplicatedKeysMessage;
+        }
+        else
+        {
+            message = "Success";
+        }
+        QMessageBox::information(this, "Convert Result", message, QMessageBox::StandardButton::Ok);
     }
 }
