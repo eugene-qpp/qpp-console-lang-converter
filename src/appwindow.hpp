@@ -19,12 +19,14 @@ private slots:
     void onColumnNameIndexChanged(int);
     void onRowNameIndexChanged(int);
     void onShouldReplaceBreakLinesChecked(bool);
+    void onCopyToClipboardButtonClicked();
     void onConvertButtonClicked();
 
 private:
     std::unique_ptr<QSettings> settings;
     QTextEdit *filenameTextEdit;
     QString translationFilenameString;
+    QTextEdit *serialTextEdit;
     QPushButton *convertButton;
     int32_t columnNameIndex;
     int32_t rowNameIndex;

@@ -1,6 +1,8 @@
 #include "appwindow.hpp"
 #include <set>
 #include <sstream>
+#include <chrono>
+#include <QApplication>
 #include <QTextEdit>
 #include <QLabel>
 #include <QPushButton>
@@ -9,6 +11,7 @@
 #include <QCheckBox>
 #include <QMessageBox>
 #include <QSettings>
+#include <QClipboard>
 
 #include "rapidcsv.h"
 #include "convert.hpp"
@@ -20,6 +23,7 @@ AppWindow::AppWindow(QWidget *parent) : QWidget(parent)
     columnNameIndex = 1;
     rowNameIndex = 1;
     shouldReplaceBreakLines = true;
+    QString lastSerial;
 
     settings = std::make_unique<QSettings>("settings.ini", QSettings::IniFormat);
     QVariant columnNameIndexVariant = settings->value("columnNameIndex");
@@ -41,6 +45,11 @@ AppWindow::AppWindow(QWidget *parent) : QWidget(parent)
     if (!translationFilenameVariant.isNull())
     {
         translationFilenameString = translationFilenameVariant.toString();
+    }
+    QVariant lastSerialVariant = settings->value("lastSerial");
+    if (!lastSerialVariant.isNull())
+    {
+        lastSerial = lastSerialVariant.toString();
     }
 
     QLabel *filenameLabel = new QLabel("Translation file:", this);
@@ -72,13 +81,23 @@ AppWindow::AppWindow(QWidget *parent) : QWidget(parent)
     shouldReplaceBreakLinesCheckBox->setGeometry(20, 200, 160, 40);
     shouldReplaceBreakLinesCheckBox->setChecked(shouldReplaceBreakLines);
 
+    QLabel *serialLabel = new QLabel("Serial:", this);
+    serialLabel->setGeometry(20, 260, 60, 40);
+    serialTextEdit = new QTextEdit(lastSerial, this);
+    serialTextEdit->setReadOnly(true);
+    serialTextEdit->setGeometry(80, 265, 200, 30);
+
+    QPushButton *copyToClipboardPushButton = new QPushButton("Copy", this);
+    copyToClipboardPushButton->setGeometry(290, 260, 60, 40);
+
     convertButton = new QPushButton("Convert", this);
     convertButton->setDisabled(translationFilenameString == nullptr);
-    convertButton->setGeometry(210, 280, 200, 60);
+    convertButton->setGeometry(420, 260, 200, 60);
 
     connect(chooseFileButton, &QPushButton::clicked, this, &AppWindow::onChooseTranslationButtonClicked);
     connect(columnNameIndexSpinBox, &QSpinBox::valueChanged, this, &AppWindow::onColumnNameIndexChanged);
     connect(rowNameIndexSpinBox, &QSpinBox::valueChanged, this, &AppWindow::onRowNameIndexChanged);
+    connect(copyToClipboardPushButton, &QPushButton::clicked, this, &AppWindow::onCopyToClipboardButtonClicked);
     connect(convertButton, &QPushButton::clicked, this, &AppWindow::onConvertButtonClicked);
 }
 
@@ -111,6 +130,12 @@ void AppWindow::onShouldReplaceBreakLinesChecked(bool checked)
     settings->setValue("shouldReplaceBreakLines", shouldReplaceBreakLines);
 }
 
+void AppWindow::onCopyToClipboardButtonClicked()
+{
+    QClipboard *clipboard = QApplication::clipboard();
+    clipboard->setText(serialTextEdit->toPlainText());
+}
+
 void AppWindow::onConvertButtonClicked()
 {
     const QString outputBaseFolder = "locales";
@@ -125,8 +150,23 @@ void AppWindow::onConvertButtonClicked()
         return;
     }
 
+    // Generate new timestamp.
+    int64_t timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    std::string timestampStr = std::to_string(timestamp);
+
     try
     {
+        QString oldTimestamp = serialTextEdit->toPlainText();
+        if (oldTimestamp.size() > 0)
+        {
+            // Remove old translation files.
+            for (auto &&langName : langNames)
+            {
+                QString filename = outputBaseFolder + "/" + langName.c_str() + "/common" + "-" + oldTimestamp + ".json";
+                QFile::remove(filename);
+            }
+        }
+
         rapidcsv::Document doc = readCvs(translationFilenameString.toStdString(), columnNameIndex, rowNameIndex);
         for (auto &&langName : langNames)
         {
@@ -137,7 +177,7 @@ void AppWindow::onConvertButtonClicked()
             {
                 dir.mkpath(outputFolder);
             }
-            const QString filename = outputFolder + "/" + "common.json";
+            const QString filename = outputFolder + "/" + "common-" + timestampStr.c_str() + ".json";
 
             const std::set<std::string> duplicatedKeys = writeJson(doc, langName, filename.toStdString(), shouldReplaceBreakLines);
 
@@ -163,6 +203,9 @@ void AppWindow::onConvertButtonClicked()
     }
     else
     {
+        serialTextEdit->setText(timestampStr.c_str());
+        settings->setValue("lastSerial", timestampStr.c_str());
+
         QString duplicatedKeysMessage{duplicatedKeysMessageStream.str().c_str()};
         QString message;
         if (duplicatedKeysMessage.size() > 0)
